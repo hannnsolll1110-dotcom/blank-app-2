@@ -227,7 +227,7 @@ with tab_search:
                 with col_a:
                     nickname = st.text_input("닉네임", "시민1")
                 with col_b:
-                    review_type = st.selectbox("정보 유형", ["자랑거리", "찾아오는 길", "메뉴 추천", "기타"])
+                    review_type = st.selectbox("정보 유형", ["착한가격메뉴","자랑거리", "찾아오는 길", "메뉴 추천", "기타"])
 
                 content = st.text_area("내용 입력", placeholder="예: 돈가스 양이 정말 많아요! 주차장은 뒤편에 있습니다.")
 
