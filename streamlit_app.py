@@ -12,7 +12,7 @@ st.set_page_config(
     page_icon="🏙️",
     layout="wide"
 )
- 
+
 st.title("서울시 착한가격업소 정보 및 시민참여형 대시보드")
 
 # [안내 박스]
@@ -201,3 +201,236 @@ with tab_search:
                 if pd.isna(pride) or str(pride).strip() == "":
                     st.warning("📢 **등록된 자랑거리가 없습니다!**")
                     st.info("이 가게의 매력을 가장 먼저 알려주세요.")
+                else:
+                    st.success(f"**✨ 자랑거리:** {pride}")
+
+            # 2. 시민 제보 현황
+            st.markdown("#### 💬 시민들의 생생 제보")
+
+            if not reviews_df.empty:
+                store_reviews = reviews_df[reviews_df["업소명"] == target_store]
+            else:
+                store_reviews = pd.DataFrame()
+
+            if not store_reviews.empty:
+                for idx, row in store_reviews[::-1].iterrows():
+                    st.info(f"**[{row['유형']}] {row['닉네임']}**: {row['내용']} ({row['날짜']})")
+            else:
+                st.caption("아직 등록된 제보가 없습니다. 첫 번째 제보자가 되어주세요! 👇")
+
+            # 3. 제보 입력 폼
+            st.divider()
+            st.markdown("#### 📝 정보 보완하기")
+
+            with st.form("info_form"):
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    nickname = st.text_input("닉네임", "시민1")
+                with col_b:
+                    review_type = st.selectbox("정보 유형", ["자랑거리", "찾아오는 길", "메뉴 추천", "기타"])
+
+                content = st.text_area("내용 입력", placeholder="예: 돈가스 양이 정말 많아요! 주차장은 뒤편에 있습니다.")
+
+                submit_btn = st.form_submit_button("등록하기")
+
+                if submit_btn:
+                    if content.strip():
+                        save_review(target_store, nickname, review_type, content)
+                        st.balloons()
+                        st.success(f"저장 완료! '{target_store}'에 정보가 등록되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error("내용을 입력해주세요.")
+        else:
+            st.info("가게 목록이 없습니다.")
+
+# -----------------------------------------------------------------------------
+# 4-B. 📊 자치구 분석 탭
+# -----------------------------------------------------------------------------
+with tab_analytics:
+    st.subheader("📊 자치구 분석")
+
+    # -------------------------------------------------------------------------
+    # 1️⃣ 자치구별 착한가격업소 수 (Top 13)
+    # -------------------------------------------------------------------------
+    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수 (Top 13)")
+
+    gu_counts = df.copy()
+    gu_counts = gu_counts[gu_counts["자치구"] != "기타"]
+    gu_counts = (
+        gu_counts.groupby("자치구")
+        .size()
+        .reset_index(name="업소 수")
+        .sort_values("업소 수", ascending=False)
+    )
+
+    top13 = gu_counts.head(13)
+
+    st.markdown(
+        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개 자치구**만 시각화했습니다."
+    )
+
+    if not top13.empty:
+        top_gu = top13.iloc[0]
+        st.metric(
+            "착한가격업소가 가장 많은 자치구",
+            f"{top_gu['자치구']}",
+            f"{int(top_gu['업소 수'])} 곳"
+        )
+
+    base_chart = alt.Chart(top13).encode(
+        y=alt.Y("자치구:N", sort="-x", title="자치구"),
+        x=alt.X("업소 수:Q", title="착한가격업소 수"),
+        tooltip=["자치구", "업소 수"]
+    )
+
+    bars = base_chart.mark_bar(cornerRadius=4).encode(
+        color=alt.Color(
+            "업소 수:Q",
+            scale=alt.Scale(scheme="reds"),
+            legend=None
+        )
+    )
+
+    labels = base_chart.mark_text(
+        align="left",
+        baseline="middle",
+        dx=5,
+        fontSize=12
+    ).encode(
+        text="업소 수:Q"
+    )
+
+    chart = (bars + labels).properties(
+        height=450,
+        width="container",
+        title="자치구별 착한가격업소 수 (Top 13)"
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=13
+    ).configure_title(
+        fontSize=16,
+        fontWeight="bold",
+        anchor="start"
+    )
+
+    st.altair_chart(chart, use_container_width=True)
+
+    with st.expander("🔍 자치구별 업소 수 (Top 13) 표로 보기"):
+        st.dataframe(top13, hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # 2️⃣ 업종별 착한가격업소 비중 (파이차트)
+    # -------------------------------------------------------------------------
+    st.markdown("#### 2️⃣ 업종별 착한가격업소 비중 분석 (파이차트)")
+
+    cat_counts = (
+        df.groupby("분류코드명")
+        .size()
+        .reset_index(name="업소 수")
+        .sort_values("업소 수", ascending=False)
+    )
+    cat_counts["비중(%)"] = (cat_counts["업소 수"] / cat_counts["업소 수"].sum() * 100).round(1)
+    cat_counts["레이블"] = cat_counts["분류코드명"] + " (" + cat_counts["비중(%)"].astype(str) + "%)"
+
+    st.markdown("※ 각 색은 **업종(분류코드명)**을 의미하며, 괄호 안 숫자는 전체에서 차지하는 비중입니다.")
+
+    pie_chart = alt.Chart(cat_counts)
+
+    pie = pie_chart.mark_arc(outerRadius=150).encode(
+        theta=alt.Theta("업소 수:Q", stack=True),
+        color=alt.Color(
+            "분류코드명:N",
+            legend=alt.Legend(title="업종")
+        ),
+        tooltip=["분류코드명", "업소 수", "비중(%)"]
+    )
+
+    text = pie_chart.mark_text(
+        radius=190,
+        size=11
+    ).encode(
+        text=alt.Text("레이블:N")
+    )
+
+    pie_figure = (pie + text).properties(
+        width="container",
+        height=400,
+        title="업종별 착한가격업소 비중"
+    ).configure_title(
+        fontSize=16,
+        fontWeight="bold",
+        anchor="start"
+    )
+
+    st.altair_chart(pie_figure, use_container_width=True)
+
+    with st.expander("📋 업종별 비중 데이터 보기"):
+        st.dataframe(cat_counts, hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # 3️⃣ 자치구 × 업종 히트맵 (상위 5개 자치구)
+    # -------------------------------------------------------------------------
+    st.markdown("#### 3️⃣ 자치구 × 업종 히트맵 (Top 5 자치구)")
+
+    # 상위 5개 자치구 선정
+    top5 = gu_counts.head(5)
+    top5_list = top5["자치구"].tolist()
+
+    st.markdown(
+        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 5개 자치구**만 히트맵으로 보여줍니다."
+    )
+
+    heatmap_data = (
+        df.groupby(["자치구", "분류코드명"])
+        .size()
+        .reset_index(name="업소 수")
+    )
+    heatmap_top5 = heatmap_data[heatmap_data["자치구"].isin(top5_list)]
+
+    heatmap_chart = (
+        alt.Chart(heatmap_top5)
+        .mark_rect()
+        .encode(
+            x=alt.X(
+                "분류코드명:N",
+                title="업종",
+                sort=cat_counts["분류코드명"].tolist(),
+                axis=alt.Axis(labelAngle=0)  # 글씨 똑바로
+            ),
+            y=alt.Y(
+                "자치구:N",
+                title="자치구",
+                sort=top5_list
+            ),
+            color=alt.Color(
+                "업소 수:Q",
+                scale=alt.Scale(scheme="reds"),
+                title="업소 수"
+            ),
+            tooltip=["자치구", "분류코드명", "업소 수"]
+        )
+        .properties(
+            width="container",
+            height=400,
+            title="자치구 × 업종별 착한가격업소 분포 (Top 5 자치구)"
+        )
+        .configure_axis(
+            labelFontSize=11,
+            titleFontSize=12
+        )
+        .configure_title(
+            fontSize=16,
+            fontWeight="bold",
+            anchor="start"
+        )
+    )
+
+    st.altair_chart(heatmap_chart, use_container_width=True)
+
+    with st.expander("📋 히트맵 데이터 (Top 5 자치구) 보기"):
+        st.dataframe(heatmap_top5, hide_index=True, use_container_width=True)
