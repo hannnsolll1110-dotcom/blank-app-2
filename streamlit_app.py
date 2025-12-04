@@ -58,11 +58,23 @@ except FileNotFoundError:
 # -----------------------------------------------------------------------------
 st.sidebar.header("🔍 검색 옵션")
 
+# [수정된 부분] 3. 사이드바: 1번 지역 선택 기능
+# -----------------------------------------------------------------------------
 st.sidebar.markdown("### 1️⃣ 지역 선택 (필수)")
-# 자치구 리스트
+
+# 데이터에서 자치구 목록을 가져와서 가나다순 정렬
 gu_list = ["전체"] + sorted(df['자치구'].unique().tolist())
-# '전체'가 기본값이지만, 사용자가 변경하도록 유도
-selected_gu = st.sidebar.selectbox("어느 구를 찾으세요?", gu_list)
+
+# selectbox: 사용자에게 구 선택을 강제하는 느낌을 줌
+selected_gu = st.sidebar.selectbox(
+    "가장 먼저 동네를 선택해주세요 👇", 
+    gu_list,
+    index=0 # 기본값은 '전체'
+)
+
+# 사용자가 '전체'를 선택했을 때 보여줄 안내 메시지 (사이드바 안에 표시)
+if selected_gu == "전체":
+    st.sidebar.caption("📢 구를 선택하면 동네 정보를 더 자세히 볼 수 있어요!")
 
 st.sidebar.markdown("---") # 구분선
 
