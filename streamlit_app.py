@@ -250,11 +250,7 @@ with tab_search:
 with tab_analytics:
     st.subheader("📊 자치구 분석")
 
-    # -------------------------------------------------------------------------
-    # 1️⃣ 자치구별 착한가격업소 수 (Top 13)
-    # -------------------------------------------------------------------------
-    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수 (Top 13)")
-
+    # 공통 집계: 자치구, 업종
     gu_counts = df.copy()
     gu_counts = gu_counts[gu_counts["자치구"] != "기타"]
     gu_counts = (
@@ -264,86 +260,21 @@ with tab_analytics:
         .sort_values("업소 수", ascending=False)
     )
 
-    top13 = gu_counts.head(13)
-
-    st.markdown(
-        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개 자치구**만 시각화했습니다."
+    cat_counts = (
+        df.groupby("분류코드명")
+        .size()
+        .reset_index(name="업소 수")
+        .sort_values("업소 수", ascending=False)
     )
-
-    if not top13.empty:
-        top_gu = top13.iloc[0]
-        st.metric(
-            "착한가격업소가 가장 많은 자치구",
-            f"{top_gu['자치구']}",
-            f"{int(top_gu['업소 수'])} 곳"
-        )
-
-    base_chart = alt.Chart(top13).encode(
-        y=alt.Y("자치구:N", sort="-x", title="자치구"),
-        x=alt.X("업소 수:Q", title="착한가격업소 수"),
-        tooltip=["자치구", "업소 수"]
-    )
-
-    bars = base_chart.mark_bar(cornerRadius=4).encode(
-        color=alt.Color(
-            "업소 수:Q",
-            scale=alt.Scale(scheme="reds"),
-            legend=None
-        )
-    )
-
-    labels = base_chart.mark_text(
-        align="left",
-        baseline="middle",
-        dx=5,
-        fontSize=12
-    ).encode(
-        text="업소 수:Q"
-    )
-
-    chart = (bars + labels).properties(
-        height=450,
-        width="container",
-        title="자치구별 착한가격업소 수 (Top 13)"
-    ).configure_axis(
-        labelFontSize=12,
-        titleFontSize=13
-    ).configure_title(
-        fontSize=16,
-        fontWeight="bold",
-        anchor="start"
-    )
-
-    st.altair_chart(chart, use_container_width=True)
-
-    with st.expander("🔍 자치구별 업소 수 (Top 13) 표로 보기"):
-        st.dataframe(top13, hide_index=True, use_container_width=True)
-
-    st.divider()
-
-   
-with tab_analytics:
-    st.subheader("📊 자치구 분석")
-with tab_analytics:
-    st.subheader("📊 자치구 분석")
 
     # -------------------------------------------------------------------------
     # 1️⃣ 자치구별 착한가격업소 수 (Top 13)
     # -------------------------------------------------------------------------
     st.markdown("#### 1️⃣ 자치구별 착한가격업소 수 (Top 13)")
 
-    gu_counts = df.copy()
-    gu_counts = gu_counts[gu_counts["자치구"] != "기타"]
-    gu_counts = (
-        gu_counts.groupby("자치구")
-        .size()
-        .reset_index(name="업소 수")
-        .sort_values("업소 수", ascending=False)
-    )
-
     top13 = gu_counts.head(13)
 
-    st.markdown("※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개**만 시각화했습니다.")
+    st.markdown("※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개 자치구**만 시각화했습니다.")
 
     if not top13.empty:
         top_gu = top13.iloc[0]
@@ -368,8 +299,16 @@ with tab_analytics:
     ).encode(text="업소 수:Q")
 
     chart = (bars + labels).properties(
-        height=450, width="container",
+        height=450,
+        width="container",
         title="자치구별 착한가격업소 수 (Top 13)"
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=13
+    ).configure_title(
+        fontSize=16,
+        fontWeight="bold",
+        anchor="start"
     )
 
     st.altair_chart(chart, use_container_width=True)
@@ -380,14 +319,16 @@ with tab_analytics:
     st.divider()
 
     # -------------------------------------------------------------------------
-    # 2️⃣ (순서 변경됨) 자치구 × 업종 히트맵 (Top 5 자치구)
+    # 2️⃣ 자치구 × 업종 히트맵 (Top 5 자치구)
     # -------------------------------------------------------------------------
     st.markdown("#### 2️⃣ 자치구 × 업종 히트맵 (Top 5 자치구)")
 
     top5 = gu_counts.head(5)
     top5_list = top5["자치구"].tolist()
 
-    st.markdown("※ 착한가격업소 수 기준 **상위 5개 자치구**만 히트맵으로 구성했습니다.")
+    st.markdown(
+        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 5개 자치구**만 히트맵으로 구성했습니다."
+    )
 
     heatmap_data = (
         df.groupby(["자치구", "분류코드명"])
@@ -401,18 +342,34 @@ with tab_analytics:
         .mark_rect()
         .encode(
             x=alt.X(
-                "분류코드명:N", title="업종",
+                "분류코드명:N",
+                title="업종",
                 sort=cat_counts["분류코드명"].tolist(),
-                axis=alt.Axis(labelAngle=0)  # 글씨 수평 표시
+                axis=alt.Axis(labelAngle=0)
             ),
-            y=alt.Y("자치구:N", title="자치구", sort=top5_list),
-            color=alt.Color("업소 수:Q", scale=alt.Scale(scheme="reds"), title="업소 수"),
+            y=alt.Y(
+                "자치구:N",
+                title="자치구",
+                sort=top5_list
+            ),
+            color=alt.Color(
+                "업소 수:Q",
+                scale=alt.Scale(scheme="reds"),
+                title="업소 수"
+            ),
             tooltip=["자치구", "분류코드명", "업소 수"]
         )
         .properties(
             width="container",
             height=400,
             title="자치구 × 업종별 착한가격업소 분포 (Top 5 자치구)"
+        ).configure_axis(
+            labelFontSize=11,
+            titleFontSize=12
+        ).configure_title(
+            fontSize=16,
+            fontWeight="bold",
+            anchor="start"
         )
     )
 
@@ -424,20 +381,12 @@ with tab_analytics:
     st.divider()
 
     # -------------------------------------------------------------------------
-    # 3️⃣ (순서 변경됨) 업종별 착한가격업소 비중 분석 (파이차트)
+    # 3️⃣ 업종별 착한가격업소 비중 분석 (파이차트)
     # -------------------------------------------------------------------------
     st.markdown("#### 3️⃣ 업종별 착한가격업소 비중 분석 (파이차트)")
 
-    # 업종별 집계
-    cat_counts = (
-        df.groupby("분류코드명")
-        .size()
-        .reset_index(name="업소 수")
-        .sort_values("업소 수", ascending=False)
-    )
-
     # 상위 5개 + 기타 묶기
-    max_cats = 6
+    max_cats = 6  # 상위 5개 + 기타
     if len(cat_counts) > max_cats:
         top = cat_counts.head(max_cats - 1).copy()
         others = cat_counts.iloc[max_cats - 1:]["업소 수"].sum()
@@ -470,6 +419,10 @@ with tab_analytics:
         width="container",
         height=400,
         title="업종별 착한가격업소 비중 (상위 5개 + 기타)"
+    ).configure_title(
+        fontSize=16,
+        fontWeight="bold",
+        anchor="start"
     )
 
     st.altair_chart(pie_figure, use_container_width=True)
