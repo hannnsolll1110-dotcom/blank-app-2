@@ -99,4 +99,196 @@ def save_review(store_name, nickname, review_type, content):
 try:
     df = load_main_data()
     reviews_df = load_reviews()
-except FileNotF
+except FileNotFoundError:
+    st.error("CSV 파일이 없습니다. '서울시 착한가격업소 현황.csv' 파일을 현재 디렉토리에 두세요.")
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# 3. 사이드바 (메뉴 선택)
+# -----------------------------------------------------------------------------
+st.sidebar.header("📂 메뉴 선택")
+page = st.sidebar.radio(
+    "원하는 기능을 선택하세요",
+    ("🔍 가게 찾기 & 시민 제보", "📊 데이터 분석 시각화")
+)
+
+# -----------------------------------------------------------------------------
+# 4-A. 🔍 가게 찾기 & 시민 제보 페이지
+# -----------------------------------------------------------------------------
+if page == "🔍 가게 찾기 & 시민 제보":
+    st.sidebar.header("🔍 지역 및 업종 선택")
+
+    st.sidebar.markdown("### 1️⃣ 지역 선택 (필수)")
+    selected_gu = st.sidebar.selectbox("어느 구를 볼까요?", ["전체"] + SEOUL_GU_LIST, index=0)
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.markdown("### 2️⃣ 업종 선택")
+    cat_list = sorted(df["분류코드명"].unique().tolist())
+    selected_cat = st.sidebar.multiselect("원하는 업종을 고르세요", cat_list, default=cat_list)
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.markdown("### 3️⃣ 가게 이름 찾기")
+    keyword = st.sidebar.text_input("가게명 입력 (선택)")
+
+    # 필터링 적용
+    filtered_df = df.copy()
+
+    if selected_gu != "전체":
+        filtered_df = filtered_df[filtered_df["자치구"] == selected_gu]
+
+    if selected_cat:
+        filtered_df = filtered_df[filtered_df["분류코드명"].isin(selected_cat)]
+
+    if keyword:
+        filtered_df = filtered_df[filtered_df["업소명"].str.contains(keyword)]
+
+    # 현황판
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("선택된 지역 가게 수", f"{len(filtered_df)} 곳")
+
+    with col2:
+        missing_count = filtered_df["자랑거리"].isna().sum() + (filtered_df["자랑거리"] == "").sum()
+        st.metric("정보 보완 필요 😢", f"{missing_count} 곳", delta="제보 환영", delta_color="inverse")
+
+    with col3:
+        if not reviews_df.empty:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            today_count = len(reviews_df[reviews_df["날짜"].str.startswith(today_str)])
+        else:
+            today_count = 0
+        st.metric("오늘의 시민 참여", f"{today_count} 건", delta="실시간 집계 중 🔴")
+
+    st.divider()
+
+    # 좌우 레이아웃
+    left_col, right_col = st.columns([1, 1])
+
+    # 왼쪽: 리스트
+    with left_col:
+        display_title = selected_gu if selected_gu != "전체" else "서울시 전체"
+        st.subheader(f"📋 {display_title} 착한업소 목록")
+
+        if filtered_df.empty:
+            st.warning("조건에 맞는 가게가 없습니다.")
+        else:
+            display_cols = ["업소명", "분류코드명", "자치구", "업소 전화번호"]
+            st.dataframe(filtered_df[display_cols], hide_index=True, use_container_width=True)
+
+    # 오른쪽: 상세 + 제보
+    with right_col:
+        st.subheader("✍️ 상세 정보 & 제보하기")
+
+        store_list = filtered_df["업소명"].unique()
+
+        if len(store_list) > 0:
+            target_store = st.selectbox("가게를 선택하세요:", store_list)
+            store_data = filtered_df[filtered_df["업소명"] == target_store].iloc[0]
+
+            # 1. 가게 정보 카드
+            with st.container(border=True):
+                st.markdown(f"### 🏠 {target_store}")
+                st.write(f"**업종:** {store_data['분류코드명']}")
+                st.write(f"**위치:** {store_data['자치구']}")
+                st.write(f"**주소:** {store_data['업소 주소']}")
+                st.write(f"**전화:** {store_data['업소 전화번호']}")
+
+                st.markdown("---")
+
+                pride = store_data["자랑거리"]
+                if pd.isna(pride) or str(pride).strip() == "":
+                    st.warning("📢 **등록된 자랑거리가 없습니다!**")
+                    st.info("이 가게의 매력을 가장 먼저 알려주세요.")
+                else:
+                    st.success(f"**✨ 자랑거리:** {pride}")
+
+            # 2. 시민 제보 현황
+            st.markdown("#### 💬 시민들의 생생 제보")
+
+            if not reviews_df.empty:
+                store_reviews = reviews_df[reviews_df["업소명"] == target_store]
+            else:
+                store_reviews = pd.DataFrame()
+
+            if not store_reviews.empty:
+                for idx, row in store_reviews[::-1].iterrows():
+                    st.info(f"**[{row['유형']}] {row['닉네임']}**: {row['내용']} ({row['날짜']})")
+            else:
+                st.caption("아직 등록된 제보가 없습니다. 첫 번째 제보자가 되어주세요! 👇")
+
+            # 3. 제보 입력 폼
+            st.divider()
+            st.markdown("#### 📝 정보 보완하기")
+
+            with st.form("info_form"):
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    nickname = st.text_input("닉네임", "시민1")
+                with col_b:
+                    review_type = st.selectbox("정보 유형", ["자랑거리", "찾아오는 길", "메뉴 추천", "기타"])
+
+                content = st.text_area("내용 입력", placeholder="예: 돈가스 양이 정말 많아요! 주차장은 뒤편에 있습니다.")
+
+                submit_btn = st.form_submit_button("등록하기")
+
+                if submit_btn:
+                    if content.strip():
+                        save_review(target_store, nickname, review_type, content)
+                        st.balloons()
+                        st.success(f"저장 완료! '{target_store}'에 정보가 등록되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error("내용을 입력해주세요.")
+        else:
+            st.info("가게 목록이 없습니다.")
+
+# -----------------------------------------------------------------------------
+# 4-B. 📊 데이터 분석 시각화 페이지
+# -----------------------------------------------------------------------------
+elif page == "📊 데이터 분석 시각화":
+    st.subheader("📊 데이터 분석 시각화")
+    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수")
+
+    # 자치구별 업소 수 집계
+    gu_counts = df.copy()
+    gu_counts = gu_counts[gu_counts["자치구"] != "기타"]  # 필요 없으면 이 줄 삭제
+    gu_counts = (
+        gu_counts.groupby("자치구")
+        .size()
+        .reset_index(name="업소 수")
+        .sort_values("업소 수", ascending=False)
+    )
+
+    # 가장 많은 구
+    if not gu_counts.empty:
+        top_gu = gu_counts.iloc[0]
+        st.metric(
+            "가장 착한가격업소가 많은 구",
+            f"{top_gu['자치구']}",
+            f"{int(top_gu['업소 수'])} 곳"
+        )
+
+    # 막대그래프
+    chart = (
+        alt.Chart(gu_counts)
+        .mark_bar()
+        .encode(
+            x=alt.X("업소 수:Q", title="업소 수"),
+            y=alt.Y("자치구:N", sort="-x", title="자치구"),
+            tooltip=["자치구", "업소 수"]
+        )
+        .properties(
+            height=500,
+            width="container",
+            title="자치구별 착한가격업소 수"
+        )
+    )
+
+    st.altair_chart(chart, use_container_width=True)
+
+    with st.expander("🔍 자치구별 업소 수 표로 보기"):
+        st.dataframe(gu_counts, hide_index=True, use_container_width=True)
+
