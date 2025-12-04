@@ -1,4 +1,4 @@
-iimport streamlit as st
+import streamlit as st
 import pandas as pd
 
 # -----------------------------------------------------------------------------
@@ -19,9 +19,9 @@ with st.container(border=True):
     with col_b:
         st.markdown("### 착한가격업소란?")
         st.markdown("""
-        물가 상승 시기에도 **저렴한 가격**과 **청결한 서비스**로 사랑받는 우리 동네 업소입니다.""")
-        st.markdown("""가격, 품질, 위생 등 **행정안전부 기준에 의거한 평가**를 통해 구청장이 지정한 업소입니다.""")
-        st.markdown("""**'자랑거리'나 '찾아오는 길' 등 정보가 비어있는 곳**을 찾아 여러분의 제보로 채워주세요!
+        물가 상승 시기에도 **저렴한 가격**과 **청결한 서비스**로 사랑받는 우리 동네 업소입니다.
+        가격, 품질, 위생 등 행정안전부 기준에 의거한 평가를 통해 구청장이 지정한 업소입니다.
+        **'자랑거리'나 '찾아오는 길' 정보가 비어있는 곳**을 찾아 여러분의 제보로 채워주세요!
         """)
 
 # -----------------------------------------------------------------------------
@@ -35,4 +35,155 @@ SEOUL_GU_LIST = [
 
 @st.cache_data
 def load_data():
-    file_name = "서울시 착한
+    file_name = "서울시 착한가격업소 현황.csv"
+    try:
+        df = pd.read_csv(file_name, encoding='cp949')
+    except:
+        df = pd.read_csv(file_name, encoding='utf-8')
+    
+    df.columns = df.columns.str.strip()
+    
+    # 1. 자치구 찾기
+    def find_gu(address):
+        if not isinstance(address, str):
+            return "기타"
+        for gu in SEOUL_GU_LIST:
+            if gu in address:
+                return gu
+        return "기타"
+
+    df['자치구'] = df['업소 주소'].apply(find_gu)
+
+    # 2. 보기 싫은 결측치 처리
+    df['업소 전화번호'] = df['업소 전화번호'].fillna("-")
+    
+    # 3. [핵심] 한글 이름 우선 정렬 로직 ✨
+    # 업소명을 문자열로 변환 (에러 방지)
+    df['업소명'] = df['업소명'].astype(str)
+    
+    # 한글(가-힣)로 시작하는지 확인하는 마스크 생성
+    mask_hangul = df['업소명'].str.match(r'^[가-힣]')
+    
+    # 한글로 시작하는 그룹 (가나다순)
+    df_hangul = df[mask_hangul].sort_values(by='업소명')
+    
+    # 나머지 그룹 (숫자, 영어 등) -> 가나다순
+    df_others = df[~mask_hangul].sort_values(by='업소명')
+    
+    # 한글 그룹을 먼저 붙이고, 그 뒤에 나머지(숫자 등)를 붙임
+    df_final = pd.concat([df_hangul, df_others])
+    
+    return df_final
+
+try:
+    df = load_data()
+except FileNotFoundError:
+    st.error("CSV 파일이 없습니다.")
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# 3. 사이드바
+# -----------------------------------------------------------------------------
+st.sidebar.header("🔍 지역 및 업종 선택")
+
+st.sidebar.markdown("### 1️⃣ 지역 선택 (필수)")
+selected_gu = st.sidebar.selectbox("어느 구를 볼까요?", ["전체"] + SEOUL_GU_LIST, index=0)
+
+st.sidebar.markdown("---") 
+
+st.sidebar.markdown("### 2️⃣ 업종 선택")
+cat_list = sorted(df['분류코드명'].unique().tolist())
+selected_cat = st.sidebar.multiselect("원하는 업종을 고르세요", cat_list, default=cat_list)
+
+st.sidebar.markdown("---")
+
+st.sidebar.markdown("### 3️⃣ 가게 이름 찾기")
+keyword = st.sidebar.text_input("가게명 입력 (선택)")
+
+# --- 필터링 로직 ---
+filtered_df = df.copy()
+
+if selected_gu != "전체":
+    filtered_df = filtered_df[filtered_df['자치구'] == selected_gu]
+
+if selected_cat:
+    filtered_df = filtered_df[filtered_df['분류코드명'].isin(selected_cat)]
+
+if keyword:
+    filtered_df = filtered_df[filtered_df['업소명'].str.contains(keyword)]
+
+# -----------------------------------------------------------------------------
+# 4. 메인 화면
+# -----------------------------------------------------------------------------
+
+if selected_gu == "전체":
+    st.info("💡 **Tip:** 왼쪽 사이드바에서 **원하는 '구'**를 선택하면 동네별로 깔끔하게 모아볼 수 있어요!")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("선택된 지역 가게 수", f"{len(filtered_df)} 곳")
+with col2:
+    missing_count = filtered_df['자랑거리'].isna().sum() + (filtered_df['자랑거리'] == '').sum()
+    st.metric("정보 보완 필요 😢", f"{missing_count} 곳", delta="제보 환영", delta_color="inverse")
+with col3:
+    st.metric("오늘의 시민 참여", "12 건") 
+
+st.divider()
+
+left_col, right_col = st.columns([1, 1])
+
+with left_col:
+    display_title = selected_gu if selected_gu != '전체' else '서울시 전체'
+    st.subheader(f"📋 {display_title} 착한업소 목록")
+    
+    if filtered_df.empty:
+        st.warning("조건에 맞는 가게가 없습니다.")
+    else:
+        display_cols = ['업소명', '분류코드명', '자치구', '업소 전화번호']
+        st.dataframe(filtered_df[display_cols], hide_index=True, use_container_width=True)
+
+with right_col:
+    st.subheader("✍️ 상세 정보 & 제보하기")
+    
+    # 여기도 필터링된 데이터 순서(한글우선) 그대로 따라감
+    store_list = filtered_df['업소명'].unique()
+    
+    if len(store_list) > 0:
+        target_store = st.selectbox("가게를 선택하세요:", store_list)
+        store_data = filtered_df[filtered_df['업소명'] == target_store].iloc[0]
+        
+        with st.container(border=True):
+            st.markdown(f"### 🏠 {target_store}")
+            st.write(f"**업종:** {store_data['분류코드명']}")
+            st.write(f"**위치:** {store_data['자치구']}")
+            st.write(f"**주소:** {store_data['업소 주소']}")
+            st.write(f"**전화:** {store_data['업소 전화번호']}")
+            
+            st.markdown("---")
+            
+            pride = store_data['자랑거리']
+            if pd.isna(pride) or str(pride).strip() == '':
+                st.warning("📢 **등록된 자랑거리가 없습니다!**")
+                st.info("이 가게의 매력을 가장 먼저 알려주세요.")
+            else:
+                st.success(f"**✨ 자랑거리:** {pride}")
+
+        # 입력폼
+        st.markdown("#### 💬 정보 보완하기")
+        with st.form("info_form"):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.text_input("닉네임", "시민1")
+            with col_b:
+                st.selectbox("정보 유형", ["자랑거리", "찾아오는 길", "메뉴 추천"])
+            
+            content = st.text_area("내용 입력", placeholder="예: 사장님이 친절해요!")
+            
+            if st.form_submit_button("등록하기"):
+                if content.strip():
+                    st.balloons()
+                    st.success(f"감사합니다! '{target_store}' 정보가 등록되었습니다.")
+                else:
+                    st.error("내용을 입력해주세요.")
+    else:
+        st.info("가게 목록이 없습니다.")
