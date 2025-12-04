@@ -104,18 +104,17 @@ except FileNotFoundError:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 3. 사이드바 (메뉴 선택)
+# 3. 상단 탭 (가로 메뉴)
 # -----------------------------------------------------------------------------
-st.sidebar.header("📂 메뉴 선택")
-page = st.sidebar.radio(
-    "원하는 기능을 선택하세요",
-    ("🔍 가게 찾기 & 시민 제보", "📊 데이터 분석 시각화")
-)
+tab_search, tab_analytics = st.tabs([
+    "🔍 가게 찾기 & 시민 제보",
+    "📊 행정동 분석"
+])
 
 # -----------------------------------------------------------------------------
-# 4-A. 🔍 가게 찾기 & 시민 제보 페이지
+# 4-A. 🔍 가게 찾기 & 시민 제보 탭
 # -----------------------------------------------------------------------------
-if page == "🔍 가게 찾기 & 시민 제보":
+with tab_search:
     st.sidebar.header("🔍 지역 및 업종 선택")
 
     st.sidebar.markdown("### 1️⃣ 지역 선택 (필수)")
@@ -246,15 +245,15 @@ if page == "🔍 가게 찾기 & 시민 제보":
             st.info("가게 목록이 없습니다.")
 
 # -----------------------------------------------------------------------------
-# 4-B. 📊 데이터 분석 시각화 페이지
+# 4-B. 📊 행정동 / 자치구 분석 탭
 # -----------------------------------------------------------------------------
-elif page == "📊 데이터 분석 시각화":
-    st.subheader("📊 데이터 분석 시각화")
-    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수")
+with tab_analytics:
+    st.subheader("📊 행정동 / 자치구 분석")
+    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수 (Top 13)")
 
     # 자치구별 업소 수 집계
     gu_counts = df.copy()
-    gu_counts = gu_counts[gu_counts["자치구"] != "기타"]  # 필요 없으면 이 줄 삭제
+    gu_counts = gu_counts[gu_counts["자치구"] != "기타"]
     gu_counts = (
         gu_counts.groupby("자치구")
         .size()
@@ -262,33 +261,61 @@ elif page == "📊 데이터 분석 시각화":
         .sort_values("업소 수", ascending=False)
     )
 
-    # 가장 많은 구
-    if not gu_counts.empty:
-        top_gu = gu_counts.iloc[0]
+    # 상위 13개만 사용
+    top13 = gu_counts.head(13)
+
+    # 설명 문구
+    st.markdown(
+        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개 구**만 시각화했습니다."
+    )
+
+    # 대표 구 정보
+    if not top13.empty:
+        top_gu = top13.iloc[0]
         st.metric(
-            "가장 착한가격업소가 많은 구",
+            "착한가격업소가 가장 많은 구",
             f"{top_gu['자치구']}",
             f"{int(top_gu['업소 수'])} 곳"
         )
 
-    # 막대그래프
-    chart = (
-        alt.Chart(gu_counts)
-        .mark_bar()
-        .encode(
-            x=alt.X("업소 수:Q", title="업소 수"),
-            y=alt.Y("자치구:N", sort="-x", title="자치구"),
-            tooltip=["자치구", "업소 수"]
+    # Altair 막대그래프 (디자인 정리)
+    base_chart = alt.Chart(top13).encode(
+        y=alt.Y("자치구:N", sort="-x", title="자치구"),
+        x=alt.X("업소 수:Q", title="착한가격업소 수"),
+        tooltip=["자치구", "업소 수"]
+    )
+
+    bars = base_chart.mark_bar(cornerRadius=4).encode(
+        color=alt.Color(
+            "업소 수:Q",
+            scale=alt.Scale(scheme="reds"),
+            legend=None
         )
-        .properties(
-            height=500,
-            width="container",
-            title="자치구별 착한가격업소 수"
-        )
+    )
+
+    labels = base_chart.mark_text(
+        align="left",
+        baseline="middle",
+        dx=5,
+        fontSize=12
+    ).encode(
+        text="업소 수:Q"
+    )
+
+    chart = (bars + labels).properties(
+        height=450,
+        width="container",
+        title="자치구별 착한가격업소 수 (Top 13)"
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=13
+    ).configure_title(
+        fontSize=16,
+        fontWeight="bold",
+        anchor="start"
     )
 
     st.altair_chart(chart, use_container_width=True)
 
-    with st.expander("🔍 자치구별 업소 수 표로 보기"):
-        st.dataframe(gu_counts, hide_index=True, use_container_width=True)
-
+    with st.expander("🔍 자치구별 업소 수 (Top 13) 표로 보기"):
+        st.dataframe(top13, hide_index=True, use_container_width=True)
