@@ -259,3 +259,71 @@ with right_col:
 
     else:
         st.info("가게 목록이 없습니다.")
+
+
+# [추가된 섹션] 5. 데이터 분석 및 시각화 존 (Visualization Zone)
+# =============================================================================
+st.divider() # 구분선 크게 하나 긋기
+st.header("📊 데이터로 보는 서울시 착한업소 트렌드")
+st.markdown("데이터 분석을 통해 **서울시 착한가격업소의 분포와 특징**을 시각화했습니다.")
+
+# 탭을 나눠서 깔끔하게 보여주기
+tab1, tab2, tab3 = st.tabs(["🏆 자치구별 순위", "🍕 업종별 비율", "🔥 지역x업종 히트맵"])
+
+# [Tab 1] 자치구별 순위 (Bar Chart)
+with tab1:
+    st.markdown("#### 🏢 어느 구에 착한업소가 가장 많을까요?")
+    
+    # 데이터 집계
+    gu_counts = df['자치구'].value_counts().reset_index()
+    gu_counts.columns = ['자치구', '업소수']
+    
+    # Altair로 예쁜 막대그래프 그리기
+    bar_chart = alt.Chart(gu_counts).mark_bar().encode(
+        x=alt.X('업소수:Q', title='업소 수'),
+        y=alt.Y('자치구:N', sort='-x', title='자치구'), # 많은 순서대로 정렬
+        color=alt.Color('업소수:Q', scale=alt.Scale(scheme='blues')), # 색상 그라데이션
+        tooltip=['자치구', '업소수']
+    ).properties(height=600)
+    
+    st.altair_chart(bar_chart, use_container_width=True)
+    
+    # 인사이트 텍스트 (자동 생성)
+    top_gu = gu_counts.iloc[0]['자치구']
+    st.info(f"💡 **Insight:** 서울시에서 착한업소가 가장 많은 곳은 **'{top_gu}'** 입니다.")
+
+# [Tab 2] 업종별 비율 (Pie/Donut Chart)
+with tab2:
+    st.markdown("#### 🍴 착한업소는 어떤 가게가 많을까요?")
+    
+    cat_counts = df['분류코드명'].value_counts().reset_index()
+    cat_counts.columns = ['업종', '업소수']
+    
+    # Plotly Express로 도넛 차트 그리기 (인터랙티브함)
+    fig = px.pie(cat_counts, values='업소수', names='업종', hole=0.4, 
+                 color_discrete_sequence=px.colors.sequential.RdBu)
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.info("💡 **Insight:** '한식'이 압도적으로 많으며, 그 외 이미용업, 세탁업 등 생활 서비스가 주를 이룹니다.")
+
+# [Tab 3] 히트맵 (Heatmap) - 가장 시각화 수업다운 차트
+with tab3:
+    st.markdown("#### 🗺️ 지역별로 어떤 업종이 발달했나요?")
+    st.caption("색이 진할수록 해당 지역에 그 업종이 많다는 뜻입니다.")
+    
+    # 데이터 집계 (구 x 업종)
+    heatmap_data = df.groupby(['자치구', '분류코드명']).size().reset_index(name='개수')
+    
+    # Altair 히트맵
+    heatmap = alt.Chart(heatmap_data).mark_rect().encode(
+        x=alt.X('자치구:N', title='자치구'),
+        y=alt.Y('분류코드명:N', title='업종'),
+        color=alt.Color('개수:Q', scale=alt.Scale(scheme='orangered'), title='업소 수'),
+        tooltip=['자치구', '분류코드명', '개수']
+    ).properties(height=500)
+    
+    st.altair_chart(heatmap, use_container_width=True)
+    
+    st.info("💡 **Insight:** 히트맵을 통해 특정 구에 편중된 업종(예: 특정 구의 한식 밀집도)을 한눈에 파악할 수 있습니다.")
