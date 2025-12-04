@@ -16,7 +16,7 @@ with st.container(border=True):
     col_a, col_b = st.columns([0.3, 4])
     with col_a:
         st.markdown("<h1 style='text-align: center;'>📢</h1>", unsafe_allow_html=True) 
-      with col_b:
+    with col_b:
         st.markdown("### 착한가격업소란?")
         st.markdown("""
         물가 상승 시기에도 **저렴한 가격**과 **청결한 서비스**로 사랑받는 우리 동네 업소입니다.""")
