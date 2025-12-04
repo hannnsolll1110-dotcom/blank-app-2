@@ -319,3 +319,76 @@ with tab_analytics:
 
     with st.expander("🔍 자치구별 업소 수 (Top 13) 표로 보기"):
         st.dataframe(top13, hide_index=True, use_container_width=True)
+
+
+# -----------------------------------------------------------------------------
+# 업종별 착한가격업소 비중 (파이차트)
+# -----------------------------------------------------------------------------
+
+st.markdown("### 🥧 업종별 착한가격업소 비중 분석")
+
+# 업종별 count
+cat_counts = (
+    df.groupby("분류코드명")
+    .size()
+    .reset_index(name="업소 수")
+    .sort_values("업소 수", ascending=False)
+)
+
+# 퍼센트 계산
+cat_counts["비중(%)"] = (cat_counts["업소 수"] / cat_counts["업소 수"].sum() * 100).round(1)
+
+# Altair Pie Chart
+pie_chart = alt.Chart(cat_counts).encode(
+    theta=alt.Theta("업소 수:Q", stack=True),
+    color=alt.Color("분류코드명:N", legend=None),
+)
+
+pie = pie_chart.mark_arc(outerRadius=150)
+text = pie_chart.mark_text(radius=180, size=12).encode(
+    text=alt.Text("비중(%)")
+)
+
+st.altair_chart(pie + text, use_container_width=True)
+
+# 표로 보기
+with st.expander("📋 업종별 비중 데이터 보기"):
+    st.dataframe(cat_counts, hide_index=True, use_container_width=True)
+
+
+
+# -----------------------------------------------------------------------------
+# 자치구 × 업종 히트맵
+# -----------------------------------------------------------------------------
+
+st.markdown("### 🔥 자치구 × 업종 히트맵 (착한가격업소 분포)")
+
+# 자치구-업종 Cross Tab 생성
+heatmap_data = (
+    df.groupby(["자치구", "분류코드명"])
+    .size()
+    .reset_index(name="업소 수")
+)
+
+# 히트맵 (Altair)
+heatmap_chart = (
+    alt.Chart(heatmap_data)
+    .mark_rect()
+    .encode(
+        x=alt.X("분류코드명:N", title="업종", sort=cat_counts["분류코드명"].tolist()),
+        y=alt.Y("자치구:N", title="자치구", sort="-x"),
+        color=alt.Color("업소 수:Q", scale=alt.Scale(scheme="reds")),
+        tooltip=["자치구", "분류코드명", "업소 수"]
+    )
+    .properties(
+        width="container",
+        height=500,
+        title="자치구 × 업종 히트맵"
+    )
+)
+
+st.altair_chart(heatmap_chart, use_container_width=True)
+
+with st.expander("📋 히트맵 데이터 보기"):
+    st.dataframe(heatmap_data, hide_index=True, use_container_width=True)
+
