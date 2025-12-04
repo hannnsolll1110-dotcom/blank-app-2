@@ -250,11 +250,7 @@ with tab_search:
 with tab_analytics:
     st.subheader("📊 자치구 분석")
 
-    # -------------------------------------------------------------------------
-    # 1️⃣ 자치구별 착한가격업소 수 (Top 13)
-    # -------------------------------------------------------------------------
-    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수 (Top 13)")
-
+    # 공통 집계: 자치구, 업종
     gu_counts = df.copy()
     gu_counts = gu_counts[gu_counts["자치구"] != "기타"]
     gu_counts = (
@@ -264,11 +260,21 @@ with tab_analytics:
         .sort_values("업소 수", ascending=False)
     )
 
+    cat_counts = (
+        df.groupby("분류코드명")
+        .size()
+        .reset_index(name="업소 수")
+        .sort_values("업소 수", ascending=False)
+    )
+
+    # -------------------------------------------------------------------------
+    # 1️⃣ 자치구별 착한가격업소 수 (Top 13)
+    # -------------------------------------------------------------------------
+    st.markdown("#### 1️⃣ 자치구별 착한가격업소 수 (Top 13)")
+
     top13 = gu_counts.head(13)
 
-    st.markdown(
-        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개 자치구**만 시각화했습니다."
-    )
+    st.markdown("※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 13개 자치구**만 시각화했습니다.")
 
     if not top13.empty:
         top_gu = top13.iloc[0]
@@ -285,21 +291,12 @@ with tab_analytics:
     )
 
     bars = base_chart.mark_bar(cornerRadius=4).encode(
-        color=alt.Color(
-            "업소 수:Q",
-            scale=alt.Scale(scheme="reds"),
-            legend=None
-        )
+        color=alt.Color("업소 수:Q", scale=alt.Scale(scheme="reds"), legend=None)
     )
 
     labels = base_chart.mark_text(
-        align="left",
-        baseline="middle",
-        dx=5,
-        fontSize=12
-    ).encode(
-        text="업소 수:Q"
-    )
+        align="left", baseline="middle", dx=5, fontSize=12
+    ).encode(text="업소 수:Q")
 
     chart = (bars + labels).properties(
         height=450,
@@ -322,67 +319,15 @@ with tab_analytics:
     st.divider()
 
     # -------------------------------------------------------------------------
-    # 2️⃣ 업종별 착한가격업소 비중 (파이차트)
+    # 2️⃣ 자치구 × 업종 히트맵 (Top 5 자치구)
     # -------------------------------------------------------------------------
-    st.markdown("#### 2️⃣ 업종별 착한가격업소 비중 분석 (파이차트)")
+    st.markdown("#### 2️⃣ 자치구 × 업종 히트맵 (Top 5 자치구)")
 
-    cat_counts = (
-        df.groupby("분류코드명")
-        .size()
-        .reset_index(name="업소 수")
-        .sort_values("업소 수", ascending=False)
-    )
-    cat_counts["비중(%)"] = (cat_counts["업소 수"] / cat_counts["업소 수"].sum() * 100).round(1)
-    cat_counts["레이블"] = cat_counts["분류코드명"] + " (" + cat_counts["비중(%)"].astype(str) + "%)"
-
-    st.markdown("※ 각 색은 **업종(분류코드명)**을 의미하며, 괄호 안 숫자는 전체에서 차지하는 비중입니다.")
-
-    pie_chart = alt.Chart(cat_counts)
-
-    pie = pie_chart.mark_arc(outerRadius=150).encode(
-        theta=alt.Theta("업소 수:Q", stack=True),
-        color=alt.Color(
-            "분류코드명:N",
-            legend=alt.Legend(title="업종")
-        ),
-        tooltip=["분류코드명", "업소 수", "비중(%)"]
-    )
-
-    text = pie_chart.mark_text(
-        radius=190,
-        size=11
-    ).encode(
-        text=alt.Text("레이블:N")
-    )
-
-    pie_figure = (pie + text).properties(
-        width="container",
-        height=400,
-        title="업종별 착한가격업소 비중"
-    ).configure_title(
-        fontSize=16,
-        fontWeight="bold",
-        anchor="start"
-    )
-
-    st.altair_chart(pie_figure, use_container_width=True)
-
-    with st.expander("📋 업종별 비중 데이터 보기"):
-        st.dataframe(cat_counts, hide_index=True, use_container_width=True)
-
-    st.divider()
-
-    # -------------------------------------------------------------------------
-    # 3️⃣ 자치구 × 업종 히트맵 (상위 5개 자치구)
-    # -------------------------------------------------------------------------
-    st.markdown("#### 3️⃣ 자치구 × 업종 히트맵 (Top 5 자치구)")
-
-    # 상위 5개 자치구 선정
     top5 = gu_counts.head(5)
     top5_list = top5["자치구"].tolist()
 
     st.markdown(
-        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 5개 자치구**만 히트맵으로 보여줍니다."
+        "※ 서울시 25개 자치구 중, **착한가격업소 수 기준 상위 5개 자치구**만 히트맵으로 구성했습니다."
     )
 
     heatmap_data = (
@@ -400,7 +345,7 @@ with tab_analytics:
                 "분류코드명:N",
                 title="업종",
                 sort=cat_counts["분류코드명"].tolist(),
-                axis=alt.Axis(labelAngle=0)  # 글씨 똑바로
+                axis=alt.Axis(labelAngle=0)
             ),
             y=alt.Y(
                 "자치구:N",
@@ -418,12 +363,10 @@ with tab_analytics:
             width="container",
             height=400,
             title="자치구 × 업종별 착한가격업소 분포 (Top 5 자치구)"
-        )
-        .configure_axis(
+        ).configure_axis(
             labelFontSize=11,
             titleFontSize=12
-        )
-        .configure_title(
+        ).configure_title(
             fontSize=16,
             fontWeight="bold",
             anchor="start"
@@ -434,3 +377,55 @@ with tab_analytics:
 
     with st.expander("📋 히트맵 데이터 (Top 5 자치구) 보기"):
         st.dataframe(heatmap_top5, hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # 3️⃣ 업종별 착한가격업소 비중 분석 (파이차트)
+    # -------------------------------------------------------------------------
+    st.markdown("#### 3️⃣ 업종별 착한가격업소 비중 분석 (파이차트)")
+
+    # 상위 5개 + 기타 묶기
+    max_cats = 6  # 상위 5개 + 기타
+    if len(cat_counts) > max_cats:
+        top = cat_counts.head(max_cats - 1).copy()
+        others = cat_counts.iloc[max_cats - 1:]["업소 수"].sum()
+        other_row = pd.DataFrame([{"분류코드명": "기타", "업소 수": others}])
+        cat_plot = pd.concat([top, other_row], ignore_index=True)
+    else:
+        cat_plot = cat_counts.copy()
+
+    cat_plot["비중(%)"] = (cat_plot["업소 수"] / cat_plot["업소 수"].sum() * 100).round(1)
+    cat_plot["범례라벨"] = cat_plot["분류코드명"] + " (" + cat_plot["비중(%)"].astype(str) + "%)"
+
+    st.markdown(
+        "※ 업종의 종류가 많기 때문에 **상위 5개 업종 + 기타**만 시각화했습니다.<br>"
+        "※ 색상 범례에는 **업종명 + 비중(%)**이 함께 표시됩니다.",
+        unsafe_allow_html=True
+    )
+
+    pie_chart = alt.Chart(cat_plot)
+
+    pie = pie_chart.mark_arc(outerRadius=150, innerRadius=40).encode(
+        theta=alt.Theta("업소 수:Q", stack=True),
+        color=alt.Color(
+            "범례라벨:N",
+            legend=alt.Legend(title="업종별 비중")
+        ),
+        tooltip=["분류코드명", "업소 수", "비중(%)"]
+    )
+
+    pie_figure = pie.properties(
+        width="container",
+        height=400,
+        title="업종별 착한가격업소 비중 (상위 5개 + 기타)"
+    ).configure_title(
+        fontSize=16,
+        fontWeight="bold",
+        anchor="start"
+    )
+
+    st.altair_chart(pie_figure, use_container_width=True)
+
+    with st.expander("📋 업종별 비중 데이터 보기 (상위 5개 + 기타)"):
+        st.dataframe(cat_plot, hide_index=True, use_container_width=True)
